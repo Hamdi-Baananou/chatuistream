@@ -12,13 +12,55 @@ st.set_page_config(
 # Custom CSS
 st.markdown("""
 <style>
+    /* Main container padding */
     .main {
         padding: 0rem 1rem;
     }
+    
+    /* Navbar styling */
+    .navbar {
+        position: fixed;
+        top: 0;
+        left: 0;
+        right: 0;
+        background-color: #ffffff;
+        padding: 1rem 2rem;
+        box-shadow: 0 2px 4px rgba(0,0,0,0.1);
+        z-index: 1000;
+        display: flex;
+        justify-content: space-between;
+        align-items: center;
+    }
+    
+    .company-name {
+        font-size: 1.5rem;
+        font-weight: 600;
+        color: #1E1E1E;
+        text-decoration: none;
+    }
+    
+    .extractor-button {
+        background-color: #4CAF50;
+        color: white;
+        padding: 0.5rem 1.5rem;
+        border-radius: 20px;
+        border: none;
+        font-weight: 500;
+        cursor: pointer;
+        transition: background-color 0.3s ease;
+    }
+    
+    .extractor-button:hover {
+        background-color: #45a049;
+    }
+    
+    /* Chat input styling */
     .stTextInput > div > div > input {
         border-radius: 20px;
         padding: 10px 20px;
     }
+    
+    /* Chat message styling */
     .chat-message {
         padding: 1.5rem;
         border-radius: 0.5rem;
@@ -26,18 +68,27 @@ st.markdown("""
         display: flex;
         flex-direction: column;
     }
+    
     .chat-message.user {
         background-color: #2b313e;
     }
+    
     .chat-message.bot {
         background-color: #475063;
     }
+    
     .chat-message .avatar {
         width: 20%;
     }
+    
     .chat-message .message {
         width: 80%;
         padding: 0 1.5rem;
+    }
+    
+    /* Add padding to main content to account for fixed navbar */
+    .main .block-container {
+        padding-top: 5rem;
     }
 </style>
 """, unsafe_allow_html=True)
@@ -47,13 +98,17 @@ if "messages" not in st.session_state:
     st.session_state.messages = []
 
 # Navbar
-col1, col2 = st.columns([6, 1])
-with col1:
-    st.markdown("<h1 style='text-align: left;'>Company Name</h1>", unsafe_allow_html=True)
-with col2:
-    if st.button("Extractor"):
-        st.sidebar.title("Extractor")
-        st.sidebar.write("Extractor functionality will be implemented here.")
+st.markdown("""
+<div class="navbar">
+    <div class="company-name">Company Name</div>
+    <button class="extractor-button" onclick="document.querySelector('.extractor-button').click()">Extractor</button>
+</div>
+""", unsafe_allow_html=True)
+
+# Extractor button functionality
+if st.button("Extractor", key="extractor_btn", help="Open Extractor"):
+    st.sidebar.title("Extractor")
+    st.sidebar.write("Extractor functionality will be implemented here.")
 
 # Welcome message
 if not st.session_state.messages:
