@@ -30,13 +30,16 @@ st.markdown("""
         display: flex;
         justify-content: space-between;
         align-items: center;
+        height: 60px;
     }
     
     .company-name {
-        font-size: 1.5rem;
-        font-weight: 600;
+        font-size: 1.8rem;
+        font-weight: 700;
         color: #1E1E1E;
         text-decoration: none;
+        font-family: 'Arial', sans-serif;
+        letter-spacing: 1px;
     }
     
     .extractor-button {
@@ -48,6 +51,10 @@ st.markdown("""
         font-weight: 500;
         cursor: pointer;
         transition: background-color 0.3s ease;
+        font-size: 1rem;
+        position: fixed;
+        right: 2rem;
+        top: 1rem;
     }
     
     .extractor-button:hover {
@@ -100,7 +107,7 @@ if "messages" not in st.session_state:
 # Navbar
 st.markdown("""
 <div class="navbar">
-    <div class="company-name">Company Name</div>
+    <div class="company-name">LEONI</div>
     <button class="extractor-button" onclick="document.querySelector('.extractor-button').click()">Extractor</button>
 </div>
 """, unsafe_allow_html=True)
