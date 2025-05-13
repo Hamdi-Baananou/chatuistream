@@ -40,8 +40,17 @@ st.markdown("""
         text-decoration: none;
         font-family: 'Arial', sans-serif;
         letter-spacing: 1px;
+        position: fixed;
+        left: 2rem;
+        top: 1rem;
     }
     
+    /* Hide the default Streamlit button */
+    .stButton button {
+        display: none;
+    }
+    
+    /* Custom button styling */
     .extractor-button {
         background-color: #4CAF50;
         color: white;
@@ -112,7 +121,7 @@ st.markdown("""
 </div>
 """, unsafe_allow_html=True)
 
-# Extractor button functionality
+# Hidden button for functionality
 if st.button("Extractor", key="extractor_btn", help="Open Extractor"):
     st.sidebar.title("Extractor")
     st.sidebar.write("Extractor functionality will be implemented here.")
