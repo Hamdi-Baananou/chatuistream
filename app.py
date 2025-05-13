@@ -1,14 +1,10 @@
-import streamlit as st
-import streamlit.components.v1 as components
-
-# --- Session State ---
-if "drawer_open" not in st.session_state:
-    st.session_state.drawer_open = False
-if "chat_messages" not in st.session_state:
-    st.session_state.chat_messages = []
+# (Keep the Python code before this as is)
 
 # --- Component HTML/JS (Content for the iframe) ---
 initial_drawer_class = "open" if st.session_state.drawer_open else ""
+# Convert Python boolean to JavaScript boolean string
+js_initial_drawer_state = "true" if st.session_state.drawer_open else "false"
+
 
 custom_ui_html = f"""
 <!DOCTYPE html>
@@ -17,6 +13,7 @@ custom_ui_html = f"""
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width, initial-scale=1">
 <style>
+    {'''/* ... all your CSS rules ... */'''}
     body {{ margin: 0; font-family: 'Arial', sans-serif; overflow: hidden; }}
     .container {{ 
         position: relative; 
@@ -91,14 +88,19 @@ custom_ui_html = f"""
     </div>
 
     <script>
-        const Streamlit = window.parent.Streamlit;
-        let currentDrawerState = {initial_drawer_class.includes("open")}; // Initialize from class
+        // Correctly initialize currentDrawerState using the Python-generated JS boolean string
+        let currentDrawerState = {js_initial_drawer_state}; // Initialize from Python
+
+        // Ensure Streamlit communication object is available
+        let Streamlit = window.parent ? window.parent.Streamlit : null;
 
         function sendActionToStreamlit(actionType) {{
             if (Streamlit) {{
                 Streamlit.setComponentValue({{ action: actionType }});
             }} else {{
-                console.error("Streamlit communication object not found in iframe.");
+                console.error("Streamlit communication object not found in iframe for sendAction.");
+                // Fallback or re-check for Streamlit object
+                if (window.parent && window.parent.Streamlit) Streamlit = window.parent.Streamlit;
             }}
         }}
 
@@ -117,34 +119,36 @@ custom_ui_html = f"""
                 }} else {{
                     Streamlit.setFrameHeight(60); 
                 }}
+            }} else {{
+                 console.error("Streamlit communication object not found for setFrameHeight.");
+                 if (window.parent && window.parent.Streamlit) Streamlit = window.parent.Streamlit;
             }}
         }}
 
         function onRender(event) {{
-            // Fallback for initial render if Streamlit object isn't ready immediately
             if (!Streamlit && window.parent && window.parent.Streamlit) {{
-                window.Streamlit = window.parent.Streamlit; // Re-assign if becomes available
+                Streamlit = window.parent.Streamlit;
             }}
 
-            if (!event.detail || !event.detail.args) {{
-                // console.log("iframe: onRender called without args. Setting height based on current state.");
+            if (!event || !event.detail || !event.detail.args) {{
+                // console.log("iframe: onRender called without args. Setting height based on current JS state: " + currentDrawerState);
                 setFrameHeightBasedOnDrawerState(currentDrawerState);
                 return;
             }}
             
             const args = event.detail.args;
             const drawer = document.getElementById('bottomDrawerInFrame');
-            const newDrawerState = args.drawer_should_be_open;
+            const newDrawerStateFromArgs = args.drawer_should_be_open;
 
-            // console.log("iframe: onRender received args:", args, "New state:", newDrawerState);
+            // console.log("iframe: onRender received args:", args, "New state from args:", newDrawerStateFromArgs);
 
-            if (newDrawerState) {{
+            if (newDrawerStateFromArgs) {{
                 drawer.classList.add('open');
             }} else {{
                 drawer.classList.remove('open');
             }}
-            currentDrawerState = newDrawerState; // Update local state
-            setFrameHeightBasedOnDrawerState(newDrawerState);
+            currentDrawerState = newDrawerStateFromArgs; // Update local JS state
+            setFrameHeightBasedOnDrawerState(newDrawerStateFromArgs);
         }}
 
         window.addEventListener("message", event => {{
@@ -153,29 +157,24 @@ custom_ui_html = f"""
             }}
         }});
         
-        // Attempt initial height setting
-        // The 'streamlit:render' event is the primary driver, but this can help if Streamlit object is ready
-        if (Streamlit) {{
-           // console.log("iframe: Initial Streamlit object found. Setting initial height.");
-           setFrameHeightBasedOnDrawerState(currentDrawerState);
-        }} else {{
-           // console.log("iframe: Streamlit object not available on initial load for height setting. Will rely on onRender.");
-           // Attempt to set a default or wait for onRender
-           // A small timeout might help if Streamlit object initializes slightly later
-           setTimeout(() => {{
-               if (window.parent && window.parent.Streamlit) {{
-                   window.Streamlit = window.parent.Streamlit;
-                   // console.log("iframe: Streamlit object found after timeout. Setting height.");
-                   setFrameHeightBasedOnDrawerState(currentDrawerState);
-               }} else {{
-                   // console.log("iframe: Streamlit object still not found after timeout.");
-               }}
-           }}, 100); // 100ms delay
-        }}
-    </script></body>
+        // Attempt initial height setting.
+        // This will use the `currentDrawerState` initialized from Python via `js_initial_drawer_state`.
+        // A small delay can help ensure the Streamlit object has a chance to be there.
+        setTimeout(() => {{
+            if (!Streamlit && window.parent && window.parent.Streamlit) {{
+                Streamlit = window.parent.Streamlit;
+            }}
+            // console.log("iframe: Attempting initial height setting. Current JS drawer state: " + currentDrawerState);
+            setFrameHeightBasedOnDrawerState(currentDrawerState);
+        }}, 50); // 50ms delay, adjust if needed
+
+    </script>
+</body>
 </html>
 """
 
+# (Keep the Python code after this, like st.set_page_config, st.markdown for global styles, 
+#  components.html call, event handling, and chat interface, as is from the previous version)
 # --- Streamlit App Layout ---
 st.set_page_config(page_title="ChatBot UI", page_icon="💬", layout="wide")
 
