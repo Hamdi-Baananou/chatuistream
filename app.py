@@ -217,8 +217,7 @@ try:
     component_event = components.html(
         custom_ui_html,
         height=component_height,
-        scrolling=False,
-        args=component_args
+        scrolling=False
     )
     
     # Safe event handling
