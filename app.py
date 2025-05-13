@@ -35,10 +35,9 @@ st.markdown("""
         box-shadow: 0 2px 4px rgba(0,0,0,0.1);
         z-index: 9999;
         display: flex;
-        justify-content: space-between; /* Changed for left/right alignment */
+        justify-content: space-between; /* For left/right alignment */
         align-items: center;
         height: 60px;
-        /* gap: 3rem; Removed as space-between handles main distribution */
     }
     
     .company-name {
@@ -65,9 +64,9 @@ st.markdown("""
         cursor: pointer;
         transition: background-color 0.3s ease;
         font-size: 1rem;
-        display: inline-flex; /* Added for icon alignment */
-        align-items: center;  /* Added for icon alignment */
-        gap: 0.5em;           /* Added for space between icon and text */
+        display: inline-flex; /* For icon alignment */
+        align-items: center;  /* For icon alignment */
+        gap: 0.5em;           /* For space between icon and text */
     }
     
     .extractor-button:hover {
@@ -101,8 +100,8 @@ st.markdown("""
     }
     
     .chat-message .message {
-        width: 100%; /* Ensuring message takes full width within its container */
-        padding: 0;  /* Adjust if specific padding is needed for message content */
+        width: 100%; 
+        padding: 0;  
     }
     
     .main .block-container {
@@ -120,10 +119,10 @@ if "messages" not in st.session_state:
     st.session_state.messages = []
 
 # Navbar
-# HTML elements reordered: button first (left), then company name (right)
-# Added ✨ icon to the button
+# HTML elements reordered: company name first (left), then button (right)
 st.markdown("""
 <div class="navbar">
+    <div class="company-name">LEONI</div>
     <button class="extractor-button" onclick="
         const currentUrl = new URL(window.location.href);
         currentUrl.searchParams.set('action', 'open_extractor');
@@ -131,7 +130,6 @@ st.markdown("""
     ">
         ✨ Extractor
     </button>
-    <div class="company-name">LEONI</div>
 </div>
 """, unsafe_allow_html=True)
 
