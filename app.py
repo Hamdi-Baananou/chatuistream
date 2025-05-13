@@ -26,7 +26,7 @@ st.markdown("""
         background-color: #ffffff;
         padding: 1rem 2rem;
         box-shadow: 0 2px 4px rgba(0,0,0,0.1);
-        z-index: 1000;
+        z-index: 9999;
         display: flex;
         justify-content: space-between;
         align-items: center;
@@ -43,6 +43,7 @@ st.markdown("""
         position: fixed;
         left: 2rem;
         top: 1rem;
+        z-index: 10000;
     }
     
     /* Hide the default Streamlit button */
@@ -64,10 +65,17 @@ st.markdown("""
         position: fixed;
         right: 2rem;
         top: 1rem;
+        z-index: 10000;
     }
     
     .extractor-button:hover {
         background-color: #45a049;
+    }
+    
+    /* Ensure navbar is above all other content */
+    .stApp > header {
+        background-color: transparent;
+        z-index: 9998;
     }
     
     /* Chat input styling */
@@ -105,6 +113,11 @@ st.markdown("""
     /* Add padding to main content to account for fixed navbar */
     .main .block-container {
         padding-top: 5rem;
+    }
+    
+    /* Ensure content stays below navbar */
+    .stApp > main {
+        z-index: 1;
     }
 </style>
 """, unsafe_allow_html=True)
