@@ -1,6 +1,7 @@
 import streamlit as st
 from streamlit_extras.colored_header import colored_header # Not used, kept from original
 import streamlit.components.v1 as components # Not used, kept from original
+from streamlit.experimental import set_query_params # For clearing query params
 
 # Page configuration
 st.set_page_config(
@@ -13,17 +14,38 @@ st.set_page_config(
 if "drawer_open" not in st.session_state:
     st.session_state.drawer_open = False
 
+# --- DEBUG PRINTS (check your terminal) ---
+print(f"--- Top of Script ---")
+print(f"Current st.query_params: {st.query_params}")
+print(f"Current st.session_state.drawer_open: {st.session_state.drawer_open}")
+# --- END DEBUG PRINTS ---
+
 # Handle query params for drawer actions
 if "drawer_action" in st.query_params:
-    action = st.query_params["drawer_action"]
+    action = st.query_params.get("drawer_action") # Use .get() for safety
+    
+    # --- DEBUG PRINTS ---
+    print(f"Found 'drawer_action': {action} in query_params.")
+    # --- END DEBUG PRINTS ---
+
     if action == "open":
         st.session_state.drawer_open = True
     elif action == "close":
         st.session_state.drawer_open = False
     
-    # Remove the query param to prevent re-triggering and clean URL.
+    # --- DEBUG PRINTS ---
+    print(f"After processing 'drawer_action', st.session_state.drawer_open: {st.session_state.drawer_open}")
+    # --- END DEBUG PRINTS ---
+    
+    # Clear the query parameter to prevent re-triggering and clean URL.
     # This will cause a Streamlit rerun.
-    del st.query_params["drawer_action"] # Requires Streamlit 1.31+
+    set_query_params() # Clears ALL query parameters
+    # If you have other query parameters you need to preserve, this approach needs refinement.
+    # For Streamlit 1.31.0+ you could use:
+    # del st.query_params["drawer_action"]
+    # For this to take effect without set_query_params() explicitly calling rerun,
+    # you might need to ensure the page reruns, e.g. st.rerun() if del doesn't trigger it
+    # in some older compatible versions. However, set_query_params() is usually safer.
 
 # Custom CSS
 st.markdown("""
@@ -214,6 +236,10 @@ close_button_onclick_js = """
     window.location.href = currentUrlClose.toString();
 """
 
+# --- DEBUG PRINTS ---
+print(f"Rendering drawer. st.session_state.drawer_open: {st.session_state.drawer_open}, drawer_visibility_class: '{drawer_visibility_class}'")
+# --- END DEBUG PRINTS ---
+
 st.markdown(f"""
 <div class="bottom-drawer {drawer_visibility_class}">
     <div class="drawer-header">
@@ -244,7 +270,7 @@ if not st.session_state.messages:
     """, unsafe_allow_html=True)
 
 # Chat input
-user_input = st.text_input("", placeholder="Type your message here...", key="input_main_chat") # Changed key to avoid potential conflicts
+user_input = st.text_input("", placeholder="Type your message here...", key="input_main_chat") 
 
 # Display chat messages
 for message in st.session_state.messages:
@@ -261,4 +287,5 @@ for message in st.session_state.messages:
 if user_input:
     st.session_state.messages.append({"role": "user", "content": user_input})
     st.session_state.messages.append({"role": "bot", "content": "This is a placeholder response. The actual chatbot functionality will be implemented later."})
+    # Clear the input field after processing by rerunning
     st.rerun()
