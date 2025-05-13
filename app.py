@@ -1,7 +1,6 @@
 import streamlit as st
-# from streamlit_extras.colored_header import colored_header # Not used, kept from original
-# import streamlit.components.v1 as components # Not used, kept from original
-# REMOVED: from streamlit.experimental import set_query_params
+# from streamlit_extras.colored_header import colored_header # Not used in this snippet
+# import streamlit.components.v1 as components # Not used in this snippet
 
 # Page configuration
 st.set_page_config(
@@ -14,38 +13,22 @@ st.set_page_config(
 if "drawer_open" not in st.session_state:
     st.session_state.drawer_open = False
 
-# --- DEBUG PRINTS (check your terminal where Streamlit Cloud logs appear) ---
-# print(f"--- Top of Script ---")
-# print(f"Current st.query_params: {st.query_params}")
-# print(f"Current st.session_state.drawer_open: {st.session_state.drawer_open}")
-# --- END DEBUG PRINTS ---
-
 # Handle query params for drawer actions
 if "drawer_action" in st.query_params:
-    action = st.query_params.get("drawer_action") # Use .get() for safety
-    
-    # --- DEBUG PRINTS ---
-    # print(f"Found 'drawer_action': {action} in query_params.")
-    # --- END DEBUG PRINTS ---
+    action = st.query_params.get("drawer_action") 
 
     if action == "open":
         st.session_state.drawer_open = True
     elif action == "close":
         st.session_state.drawer_open = False
     
-    # --- DEBUG PRINTS ---
-    # print(f"After processing 'drawer_action', st.session_state.drawer_open: {st.session_state.drawer_open}")
-    # --- END DEBUG PRINTS ---
-    
-    # Remove the query parameter to prevent re-triggering and clean URL.
-    # Modifying st.query_params (like with del) should ideally trigger a rerun.
-    # This is more reliable in Streamlit 1.31.0+.
-    if "drawer_action" in st.query_params: # Check again just in case
+    # Remove the query parameter and rerun
+    if "drawer_action" in st.query_params: # Check again as st.query_params is a new dict on rerun
         del st.query_params["drawer_action"]
     
-    st.rerun() # Explicitly trigger a rerun AFTER state update and param deletion
+    st.rerun()
 
-# Custom CSS
+# Custom CSS and JavaScript functions
 st.markdown("""
 <style>
     /* Main container padding */
@@ -198,11 +181,22 @@ st.markdown("""
         background-color: #c0392b;
     }
     .drawer-content {
-        /* Style for the content area within the drawer */
         color: #333;
     }
-
 </style>
+<script>
+    function openExtractorDrawer() {
+        const currentUrl = new URL(window.location.href);
+        currentUrl.searchParams.set('drawer_action', 'open');
+        window.location.href = currentUrl.toString();
+    }
+
+    function closeExtractorDrawer() {
+        const currentUrl = new URL(window.location.href);
+        currentUrl.searchParams.set('drawer_action', 'close');
+        window.location.href = currentUrl.toString();
+    }
+</script>
 """, unsafe_allow_html=True)
 
 # Initialize session state for chat history
@@ -210,15 +204,11 @@ if "messages" not in st.session_state:
     st.session_state.messages = []
 
 # --- NAVBAR ---
-# "Extractor" button now sets 'drawer_action=open'
+# "Extractor" button now calls the JavaScript function openExtractorDrawer()
 st.markdown("""
 <div class="navbar">
     <div class="company-name">LEONI</div>
-    <button class="extractor-button" onclick="
-        const currentUrl = new URL(window.location.href);
-        currentUrl.searchParams.set('drawer_action', 'open');
-        window.location.href = currentUrl.toString();
-    ">
+    <button class="extractor-button" onclick="openExtractorDrawer()">
         ✨ Extractor
     </button>
 </div>
@@ -227,22 +217,13 @@ st.markdown("""
 
 # --- BOTTOM DRAWER ---
 drawer_visibility_class = "open" if st.session_state.drawer_open else ""
-# Prepare JavaScript for the close button in the drawer
-close_button_onclick_js = """
-    const currentUrlClose = new URL(window.location.href);
-    currentUrlClose.searchParams.set('drawer_action', 'close');
-    window.location.href = currentUrlClose.toString();
-"""
 
-# --- DEBUG PRINTS ---
-# print(f"Rendering drawer. st.session_state.drawer_open: {st.session_state.drawer_open}, drawer_visibility_class: '{drawer_visibility_class}'")
-# --- END DEBUG PRINTS ---
-
+# The "Close" button now calls the JavaScript function closeExtractorDrawer()
 st.markdown(f"""
 <div class="bottom-drawer {drawer_visibility_class}">
     <div class="drawer-header">
         <h2>Extractor Details</h2>
-        <button class="close-drawer-button" onclick="{close_button_onclick_js}">
+        <button class="close-drawer-button" onclick="closeExtractorDrawer()">
             Close
         </button>
     </div>
@@ -250,14 +231,12 @@ st.markdown(f"""
         <p>This is where the content for the Extractor will be displayed.</p>
         <p>You can add more specific functionality, forms, or data visualizations here later.</p>
         <p>For example, you might embed another Streamlit component or custom HTML content.</p>
-        <!-- Your custom drawer content will go here -->
     </div>
 </div>
 """, unsafe_allow_html=True)
 
 
 # --- MAIN CHAT INTERFACE ---
-
 # Welcome message (only if no chat messages yet)
 if not st.session_state.messages:
     st.markdown("""
@@ -284,5 +263,5 @@ for message in st.session_state.messages:
 # Handle user input
 if user_input:
     st.session_state.messages.append({"role": "user", "content": user_input})
-    st.session_state.messages.append({"role": "bot", "content": "This is a placeholder response. The actual chatbot functionality will be implemented later."})
+    st.session_state.messages.append({"role": "bot", "content": "This is a placeholder response."})
     st.rerun()
