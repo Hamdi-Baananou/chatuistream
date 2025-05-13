@@ -1,204 +1,246 @@
 import streamlit as st
-# Removed unused imports: streamlit_extras.colored_header, streamlit.components.v1
+import streamlit.components.v1 as components
 
-# Page configuration
-st.set_page_config(
-    page_title="ChatBot UI",
-    page_icon="💬",
-    layout="wide"
-)
-
-# Initialize session state for drawer
+# --- Session State ---
 if "drawer_open" not in st.session_state:
     st.session_state.drawer_open = False
+if "chat_messages" not in st.session_state:
+    st.session_state.chat_messages = []
 
-# --- Query Parameter Handling ---
-# This logic processes the action from the URL.
-# It changes session state and triggers a rerun if the state needs to change.
-# It's designed to not loop if the URL param matches the current state.
-if "drawer_action" in st.query_params:
-    action = st.query_params.get("drawer_action")
-    
-    drawer_is_currently_open = st.session_state.get("drawer_open", False)
-    action_caused_state_change = False
-
-    if action == "open" and not drawer_is_currently_open:
-        st.session_state.drawer_open = True
-        action_caused_state_change = True
-    elif action == "close" and drawer_is_currently_open:
-        st.session_state.drawer_open = False
-        action_caused_state_change = True
-    
-    if action_caused_state_change:
-        # We need to remove the query param from the URL to prevent it from
-        # being reprocessed on subsequent non-action reruns or if the user bookmarks/reloads.
-        # The cleanest way is to navigate. However, Streamlit doesn't have a direct
-        # "redirect to new URL without param" Python command that doesn't involve JS.
-        # The current JS already handles navigation. The st.rerun() ensures the Python UI updates.
-        st.rerun()
-
-# --- HTML, CSS, and JavaScript Injection ---
-# Determine drawer class based on session state
-drawer_visibility_class = "open" if st.session_state.get("drawer_open", False) else ""
-
-html_content = f"""
+# --- Component HTML/JS (Content for the iframe) ---
+# This HTML will live inside the iframe.
+# It communicates with the parent Streamlit app.
+custom_ui_html = f"""
+<!DOCTYPE html>
+<html>
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
 <style>
-    /* Main container padding */
-    body {{ margin: 0; }} /* Reset body margin for consistency */
-    .main {{ padding: 0rem 1rem; }}
-    
-    /* Navbar styling */
+    body {{ margin: 0; font-family: 'Arial', sans-serif; overflow: hidden; /* Prevent body scroll, iframe handles it */ }}
+    .container {{ 
+        /* This container will hold the navbar and the drawer */
+        /* It needs to allow the drawer to overlay correctly */
+        position: relative; 
+        width: 100vw; 
+        height: 100vh; 
+    }}
     .navbar {{
-        position: fixed; top: 0; left: 0; right: 0; background-color: #ffffff;
+        position: fixed; /* Fixed within the iframe */
+        top: 0; left: 0; right: 0; background-color: #ffffff;
         padding: 1rem 2rem; box-shadow: 0 2px 4px rgba(0,0,0,0.1);
-        z-index: 9999; display: flex; justify-content: space-between;
+        z-index: 100; display: flex; justify-content: space-between;
         align-items: center; height: 60px; box-sizing: border-box;
     }}
-    .company-name {{
-        font-size: 1.8rem; font-weight: 700; color: #1E1E1E; text-decoration: none;
-        font-family: 'Arial', sans-serif; letter-spacing: 1px;
-    }}
-    /* Custom button styling for navbar */
+    .company-name {{ font-size: 1.8rem; font-weight: 700; color: #1E1E1E; }}
     .extractor-button {{
         background-color: #4CAF50; color: white; padding: 0.5rem 1.5rem;
         border-radius: 20px; border: none; font-weight: 500; cursor: pointer;
         transition: background-color 0.3s ease; font-size: 1rem;
-        display: inline-flex; align-items: center; gap: 0.5em;           
+        display: inline-flex; align-items: center; gap: 0.5em;
     }}
     .extractor-button:hover {{ background-color: #45a049; }}
-    
-    /* Streamlit's default header (if visible) */
-    .stApp > header {{ display: none !important; }} /* Hide Streamlit's default header */
-    
-    /* Chat input styling */
-    .stTextInput > div > div > input {{ border-radius: 20px; padding: 10px 20px; }}
-    
-    /* Chat message styling */
-    .chat-message {{
-        padding: 1.5rem; border-radius: 0.5rem; margin-bottom: 1rem;
-        display: flex; flex-direction: column;
-    }}
-    .chat-message.user {{ background-color: #2b313e; }}
-    .chat-message.bot {{ background-color: #475063; }}
-    .chat-message .message {{ width: 100%; padding: 0; }}
-    
-    /* Main content padding to account for fixed navbar */
-    /* Target Streamlit's main view container more reliably */
-    div[data-testid="stAppViewContainer"] > section {{
-        padding-top: 75px !important; /* 60px navbar + 15px buffer */
-    }}
-    
-    /* Ensure main app content z-index is low */
-    .stApp > main {{ z-index: 1; }}
 
-    /* Bottom Drawer Styling */
     .bottom-drawer {{
-        position: fixed; bottom: 0; left: 0; right: 0; width: 100%;
-        height: calc(100vh - 60px); background-color: #f8f9fa;
-        z-index: 9990; box-shadow: 0 -3px 10px rgba(0,0,0,0.15);
-        transform: translateY(100%); transition: transform 0.3s ease-in-out;
+        position: fixed; /* Fixed within the iframe */
+        bottom: 0; left: 0; right: 0; 
+        width: 100%;
+        height: calc(100vh - 60px); /* Fills space below navbar */
+        background-color: #f8f9fa;
+        z-index: 90; /* Below navbar, above other potential iframe content */
+        box-shadow: 0 -3px 10px rgba(0,0,0,0.15);
+        transform: translateY(100%); /* Start off-screen (slid down fully) */
+        transition: transform 0.3s ease-in-out;
         padding: 20px; box-sizing: border-box; overflow-y: auto;
+        color: #333;
     }}
-    .bottom-drawer.open {{ transform: translateY(0); }}
+    .bottom-drawer.open {{ transform: translateY(0); }} /* Slide into view */
+    
     .drawer-header {{
         display: flex; justify-content: space-between; align-items: center;
         padding-bottom: 15px; border-bottom: 1px solid #e0e0e0; margin-bottom: 15px;
     }}
-    .drawer-header h2 {{ margin: 0; font-size: 1.5rem; color: #333; }}
+    .drawer-header h2 {{ margin: 0; font-size: 1.5rem; }}
     .close-drawer-button {{
         background-color: #e74c3c; color: white; padding: 0.4rem 1rem; border: none;
         border-radius: 15px; font-weight: 500; cursor: pointer;
         transition: background-color 0.3s ease; font-size: 0.9rem;
     }}
     .close-drawer-button:hover {{ background-color: #c0392b; }}
-    .drawer-content {{ color: #333; }}
+    .drawer-content p {{ color: #333; }}
 </style>
+</head>
+<body>
+    <div class="container"> {/* Main container for iframe content */}
+        <div class="navbar">
+            <div class="company-name">LEONI</div>
+            <button id="extractorBtnInFrame" class="extractor-button">
+                ✨ Extractor
+            </button>
+        </div>
 
-<!-- Navbar HTML (NO INLINE ONCLICK) -->
-<div class="navbar">
-    <div class="company-name">LEONI</div>
-    <button id="extractorBtn" class="extractor-button">
-        ✨ Extractor
-    </button>
-</div>
-
-<!-- Drawer HTML (NO INLINE ONCLICK) -->
-<div id="bottomDrawer" class="bottom-drawer {drawer_visibility_class}">
-    <div class="drawer-header">
-        <h2>Extractor Details</h2>
-        <button id="closeDrawerBtn" class="close-drawer-button">
-            Close
-        </button>
-    </div>
-    <div class="drawer-content">
-        <p>This is where the content for the Extractor will be displayed.</p>
-        <p>You can add more specific functionality, forms, or data visualizations here later.</p>
-    </div>
-</div>
-
-<script>
-    // Define actions
-    function triggerDrawerAction(actionType) {{
-        const currentUrl = new URL(window.location.href);
-        currentUrl.searchParams.set('drawer_action', actionType);
-        // Remove the param if it's already set to the same action to avoid no-op navigation if possible,
-        // though navigating to the same URL with same params is usually fine.
-        // Or ensure the Python side handles no-op gracefully.
-        window.location.href = currentUrl.toString();
-    }}
-
-    // Attach event listeners
-    // We need to ensure this script runs after elements are in DOM.
-    // For st.markdown, the script at the end of the block should be fine.
-    // To be robust against multiple executions of this script block if Streamlit
-    // were to re-render it without a full page reload (less common for st.markdown):
-    
-    const extractorButton = document.getElementById('extractorBtn');
-    if (extractorButton && !extractorButton.hasAttribute('data-listener-attached')) {{
-        extractorButton.addEventListener('click', function() {{ triggerDrawerAction('open'); }});
-        extractorButton.setAttribute('data-listener-attached', 'true');
-    }}
-
-    const closeButton = document.getElementById('closeDrawerBtn');
-    if (closeButton && !closeButton.hasAttribute('data-listener-attached')) {{
-        closeButton.addEventListener('click', function() {{ triggerDrawerAction('close'); }});
-        closeButton.setAttribute('data-listener-attached', 'true');
-    }}
-</script>
-"""
-st.markdown(html_content, unsafe_allow_html=True)
-
-
-# --- MAIN CHAT INTERFACE (Below the fixed elements) ---
-# Initialize session state for chat history
-if "messages" not in st.session_state:
-    st.session_state.messages = []
-
-# Welcome message
-if not st.session_state.messages:
-    st.markdown("""
-    <div style='text-align: center; padding: 1rem 0;'>
-        <h1>Welcome to the ChatBot</h1>
-        <p>How can I help you today?</p>
-    </div>
-    """, unsafe_allow_html=True)
-
-# Chat input
-user_input = st.text_input("", placeholder="Type your message here...", key="input_main_chat") 
-
-# Display chat messages
-for message_idx, message in enumerate(st.session_state.messages):
-    with st.container(): # Using key for containers if there are many dynamic ones
-        st.markdown(f"""
-        <div class="chat-message {message['role']}">
-            <div class="message"> 
-                {message['content']}
+        <div id="bottomDrawerInFrame" class="bottom-drawer"> {/* Drawer content */}
+            <div class="drawer-header">
+                <h2>Extractor Details</h2>
+                <button id="closeDrawerBtnInFrame" class="close-drawer-button">
+                    Close
+                </button>
+            </div>
+            <div class="drawer-content">
+                <p>This is where the content for the Extractor will be displayed in the iframe.</p>
             </div>
         </div>
-        """, unsafe_allow_html=True)
+    </div>
 
-# Handle user input
-if user_input:
-    st.session_state.messages.append({"role": "user", "content": user_input})
-    st.session_state.messages.append({"role": "bot", "content": "This is a placeholder response."})
-    st.rerun()
+    <script>
+        // Ensure Streamlit communication object is available from the parent window
+        const Streamlit = window.parent.Streamlit;
+
+        function sendActionToStreamlit(actionType) {{
+            if (Streamlit) {{
+                Streamlit.setComponentValue({{ action: actionType }});
+            }} else {{
+                console.error("Streamlit communication object not found in iframe.");
+            }}
+        }}
+
+        document.getElementById('extractorBtnInFrame').addEventListener('click', function() {{
+            sendActionToStreamlit('open_drawer');
+        }});
+
+        document.getElementById('closeDrawerBtnInFrame').addEventListener('click', function() {{
+            sendActionToStreamlit('close_drawer');
+        }});
+        
+        // Function to handle render events from Streamlit (e.g., when args change)
+        function onRender(event) {{
+            if (!event.detail || !event.detail.args) {{
+                // console.log("iframe: onRender called without args or detail");
+                if (Streamlit) Streamlit.setFrameHeight(window.innerHeight); // Set to full height
+                return;
+            }}
+            
+            const args = event.detail.args;
+            const drawer = document.getElementById('bottomDrawerInFrame');
+
+            // console.log("iframe: onRender received args:", args);
+
+            if (args.drawer_should_be_open) {{
+                drawer.classList.add('open');
+            }} else {{
+                drawer.classList.remove('open');
+            }}
+            
+            // The component should take full viewport height because it manages its own overlay
+            if (Streamlit) {{
+                Streamlit.setFrameHeight(window.innerHeight); 
+            }}
+        }}
+
+        // Listen for messages from Streamlit parent
+        window.addEventListener("message", event => {{
+            // A more secure check for origin might be needed if deploying publicly
+            // if (event.origin !== window.location.ancestorOrigins[0]) return; 
+            if (event.data && event.data.type === "streamlit:render") {{
+                onRender(event);
+            }}
+        }});
+        
+        // Initial setup: tell Streamlit the component is ready and its desired height
+        // This might also be triggered by the first "streamlit:render" event.
+        if (Streamlit) {{
+            Streamlit.setFrameHeight(window.innerHeight); // Tell parent to make iframe full height
+            // Send an initial "ready" or request initial state if needed
+            // Streamlit.setComponentValue({status: "iframe_ready"});
+        }} else {{
+            console.error("iframe: Streamlit object not available on initial load.");
+        }}
+    </script>
+</body>
+</html>
+"""
+
+# --- Streamlit App Layout ---
+st.set_page_config(page_title="ChatBot UI", page_icon="💬", layout="wide")
+
+# CSS to make the iframe take full width and remove Streamlit's default header/padding
+st.markdown("""
+<style>
+    /* Remove Streamlit's default header */
+    header[data-testid="stHeader"] { display: none !important; }
+    
+    /* Ensure the block container and app view container for the component take full width/height */
+    /* And remove padding around the component itself */
+    div[data-testid="stAppViewContainer"] > .main > div[data-testid="block-container"] {
+        padding: 0 !important;
+        margin: 0 !important;
+    }
+    iframe[title^="st.iframe"] { /* Selects iframes created by st.components.v1.html */
+        border: none !important; /* Remove iframe border */
+        width: 100vw !important;
+        height: 100vh !important; /* Make iframe take full viewport height */
+    }
+    /* Ensure no body margin in the main Streamlit app if it affects layout */
+    body { margin: 0 !important; }
+</style>
+""", unsafe_allow_html=True)
+
+# Arguments to pass to the HTML component
+component_args = {"drawer_should_be_open": st.session_state.drawer_open}
+
+# Embed the custom UI as an HTML component
+# The component will take full screen. The chat will be "behind" it conceptually.
+# If you want chat visible simultaneously, this design needs changing.
+component_event = components.html(
+    custom_ui_html,
+    height=0, # Initial height, JS in iframe will call Streamlit.setFrameHeight(window.innerHeight)
+    scrolling=False, # The iframe itself shouldn't scroll; content inside it can.
+    key="custom_navbar_drawer_ui" # Unique key
+)
+
+# Handle actions sent from the HTML component
+if component_event:
+    action = component_event.get("action")
+    # print(f"Streamlit: Received action from component: {action}") # For debugging
+    if action == "open_drawer" and not st.session_state.drawer_open:
+        st.session_state.drawer_open = True
+        st.rerun() # Rerun to update component_args and re-render component
+    elif action == "close_drawer" and st.session_state.drawer_open:
+        st.session_state.drawer_open = False
+        st.rerun()
+
+# --- Chat Interface ---
+# Since the component above takes 100vh, this chat interface might be
+# visually "underneath" or not accessible unless the component's height
+# is managed differently (e.g., only 60px when drawer is closed).
+
+# If the component always takes 100vh:
+# To have the chat interface, it would need to be *part of the component's HTML*
+# or the component's height logic needs to be smarter:
+# - 60px height when drawer is closed (to show only navbar)
+# - 100vh height when drawer is open (to overlay)
+#
+# For the current `custom_ui_html` which sets iframe height to `window.innerHeight`,
+# the following Streamlit chat elements will be rendered but likely not visible.
+# Let's comment it out for now to focus on the component.
+
+"""
+# Add some space if the navbar is only 60px from the component
+# st.markdown("<div style='padding-top: 70px;'></div>", unsafe_allow_html=True)
+
+# Welcome message and chat display
+# if not st.session_state.chat_messages:
+#     st.info("Welcome! Ask me anything.")
+
+# for msg_idx, msg in enumerate(st.session_state.chat_messages):
+#     with st.chat_message(msg["role"], avatar="🧑‍💻" if msg["role"] == "user" else "🤖"):
+#         st.write(msg["content"])
+
+# user_prompt = st.chat_input("Your message...", key="main_chat_input")
+
+# if user_prompt:
+#     st.session_state.chat_messages.append({"role": "user", "content": user_prompt})
+#     # Simulate bot response
+#     st.session_state.chat_messages.append({"role": "assistant", "content": f"Echo: {user_prompt}"})
+#     st.rerun() # Rerun to display new messages
+"""
