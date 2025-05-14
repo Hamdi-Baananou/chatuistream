@@ -8,6 +8,9 @@ if "chat_messages" not in st.session_state:
     st.session_state.chat_messages = []
 
 # --- Component HTML/JS (Content for the iframe) ---
+# This HTML will live inside the iframe.
+# It communicates with the parent Streamlit app.
+# Determine drawer class based on current session state for initial load
 initial_drawer_class = "open" if st.session_state.drawer_open else ""
 
 custom_ui_html = f"""
@@ -77,6 +80,7 @@ custom_ui_html = f"""
             </button>
         </div>
 
+        <!-- Drawer content. Initial class is set by Python f-string -->
         <div id="bottomDrawerInFrame" class="bottom-drawer {initial_drawer_class}"> 
             <div class="drawer-header">
                 <h2>Extractor Details</h2>
@@ -92,7 +96,6 @@ custom_ui_html = f"""
 
     <script>
         const Streamlit = window.parent.Streamlit;
-        let currentDrawerState = {initial_drawer_class.includes("open")}; // Initialize from class
 
         function sendActionToStreamlit(actionType) {{
             if (Streamlit) {{
@@ -110,41 +113,32 @@ custom_ui_html = f"""
             sendActionToStreamlit('close_drawer');
         }});
         
-        function setFrameHeightBasedOnDrawerState(isDrawerOpen) {{
-            if (Streamlit) {{
-                if (isDrawerOpen) {{
-                    Streamlit.setFrameHeight(window.innerHeight); 
-                }} else {{
-                    Streamlit.setFrameHeight(60); 
-                }}
-            }}
-        }}
-
         function onRender(event) {{
-            // Fallback for initial render if Streamlit object isn't ready immediately
-            if (!Streamlit && window.parent && window.parent.Streamlit) {{
-                window.Streamlit = window.parent.Streamlit; // Re-assign if becomes available
-            }}
-
             if (!event.detail || !event.detail.args) {{
-                // console.log("iframe: onRender called without args. Setting height based on current state.");
-                setFrameHeightBasedOnDrawerState(currentDrawerState);
+                if (Streamlit) Streamlit.setFrameHeight(window.innerHeight);
                 return;
             }}
             
             const args = event.detail.args;
             const drawer = document.getElementById('bottomDrawerInFrame');
-            const newDrawerState = args.drawer_should_be_open;
 
-            // console.log("iframe: onRender received args:", args, "New state:", newDrawerState);
-
-            if (newDrawerState) {{
+            if (args.drawer_should_be_open) {{
                 drawer.classList.add('open');
             }} else {{
                 drawer.classList.remove('open');
             }}
-            currentDrawerState = newDrawerState; // Update local state
-            setFrameHeightBasedOnDrawerState(newDrawerState);
+            
+            // Option 1: Always full height for overlay
+            // if (Streamlit) Streamlit.setFrameHeight(window.innerHeight); 
+
+            // Option 2: Adjust height based on drawer state (to show chat below)
+            if (Streamlit) {{
+                if (args.drawer_should_be_open) {{
+                    Streamlit.setFrameHeight(window.innerHeight); // Full height for overlay
+                }} else {{
+                    Streamlit.setFrameHeight(60); // Only navbar height
+                }}
+            }}
         }}
 
         window.addEventListener("message", event => {{
@@ -153,26 +147,24 @@ custom_ui_html = f"""
             }}
         }});
         
-        // Attempt initial height setting
-        // The 'streamlit:render' event is the primary driver, but this can help if Streamlit object is ready
+        // Initial render call to set height and drawer state based on initial args
+        // Streamlit typically sends an initial render event, but this can help.
+        // However, the `onRender` function itself is designed to be called by Streamlit.
+        // So, it's better to rely on Streamlit's initial "streamlit:render" message.
+        // The `initial_drawer_class` in the HTML helps with the very first paint.
         if (Streamlit) {{
-           // console.log("iframe: Initial Streamlit object found. Setting initial height.");
-           setFrameHeightBasedOnDrawerState(currentDrawerState);
+            // Set initial height based on drawer state
+            const initialDrawerIsOpen = document.getElementById('bottomDrawerInFrame').classList.contains('open');
+            if (initialDrawerIsOpen) {{
+                 Streamlit.setFrameHeight(window.innerHeight);
+            }} else {{
+                 Streamlit.setFrameHeight(60);
+            }}
         }} else {{
-           // console.log("iframe: Streamlit object not available on initial load for height setting. Will rely on onRender.");
-           // Attempt to set a default or wait for onRender
-           // A small timeout might help if Streamlit object initializes slightly later
-           setTimeout(() => {{
-               if (window.parent && window.parent.Streamlit) {{
-                   window.Streamlit = window.parent.Streamlit;
-                   // console.log("iframe: Streamlit object found after timeout. Setting height.");
-                   setFrameHeightBasedOnDrawerState(currentDrawerState);
-               }} else {{
-                   // console.log("iframe: Streamlit object still not found after timeout.");
-               }}
-           }}, 100); // 100ms delay
+            console.error("iframe: Streamlit object not available on initial load for height setting.");
         }}
-    </script></body>
+    </script>
+</body>
 </html>
 """
 
@@ -184,55 +176,56 @@ st.markdown("""
     header[data-testid="stHeader"] { display: none !important; }
     div[data-testid="stAppViewContainer"] > .main > div[data-testid="block-container"] {
         padding: 0 !important; margin: 0 !important;
-        width: 100% !important; 
-        max-width: 100% !important; 
+        width: 100% !important; /* Ensure block container also takes full width */
+        max-width: 100% !important; /* Override Streamlit's max-width if any */
     }
     iframe[title^="st.iframe"] {
         border: none !important; 
-        width: 100% !important; 
+        width: 100% !important; /* Changed from 100vw to 100% to be relative to parent */
+        /* height is managed by the component itself via Streamlit.setFrameHeight */
     }
     body { margin: 0 !important; }
 </style>
 """, unsafe_allow_html=True)
 
-# Args are not strictly needed by components.html itself for its own rendering,
-# but are passed to the iframe's `onRender` event.
 component_args = {"drawer_should_be_open": st.session_state.drawer_open}
 
 component_event = components.html(
     custom_ui_html,
-    height=60, # Start with a fixed small height. JS will adjust.
-    scrolling=False,
-    key="custom_navbar_drawer_ui" # Unique key
+    height=60 if not st.session_state.drawer_open else 0, # Initial height guess. JS will correct.
+    scrolling=False, 
+    key="custom_navbar_drawer_ui"
 )
 
 if component_event:
     action = component_event.get("action")
-    # print(f"Streamlit App: Received action '{action}'") # Debugging
     if action == "open_drawer" and not st.session_state.drawer_open:
         st.session_state.drawer_open = True
-        # print(f"Streamlit App: Set drawer_open to True. Rerunning.") # Debugging
-        st.rerun()
+        st.rerun() 
     elif action == "close_drawer" and st.session_state.drawer_open:
         st.session_state.drawer_open = False
-        # print(f"Streamlit App: Set drawer_open to False. Rerunning.") # Debugging
         st.rerun()
 
 # --- Chat Interface ---
-if not st.session_state.drawer_open:
-    st.markdown("<div style='padding: 0 1rem;'>", unsafe_allow_html=True)
+# This will now appear below the 60px iframe component when the drawer is closed.
+# No extra padding-top div is needed if the component correctly sets its height to 60px.
+
+if not st.session_state.drawer_open: # Only show chat if drawer is closed
+    st.markdown("<div style='padding: 0 1rem;'>", unsafe_allow_html=True) # Add some horizontal padding for chat
 
     if not st.session_state.chat_messages:
         st.info("Welcome! Ask me anything.")
 
     for msg_idx, msg in enumerate(st.session_state.chat_messages):
-        with st.chat_message(msg["role"]):
+        # Using Streamlit's native chat elements for better styling and functionality
+        with st.chat_message(msg["role"]): 
             st.write(msg["content"])
 
     user_prompt = st.chat_input("Your message...", key="main_chat_input")
 
     if user_prompt:
         st.session_state.chat_messages.append({"role": "user", "content": user_prompt})
+        # Simulate bot response
         st.session_state.chat_messages.append({"role": "assistant", "content": f"Echo from bot: {user_prompt}"})
         st.rerun()
     
