@@ -11,9 +11,6 @@ if "chat_messages" not in st.session_state:
 initial_drawer_class = "open" if st.session_state.drawer_open else ""
 js_initial_drawer_state = "true" if st.session_state.drawer_open else "false"
 
-# PASTE YOUR FULL custom_ui_html HERE (the one with your navbar, drawer, etc.)
-# Ensure the JavaScript inside it is the corrected version from our previous iterations,
-# especially the part that initializes and uses `StreamlitLib`.
 custom_ui_html = f"""
 <!DOCTYPE html>
 <html>
@@ -90,21 +87,24 @@ custom_ui_html = f"""
             </div>
             <div class="drawer-content">
                 <p>This is where the content for the Extractor will be displayed in the iframe.</p>
-                <p>More features to come!</p>
             </div>
         </div>
     </div>
 
     <script>
-        let StreamlitLib = null; 
+        // This is PURE JAVASCRIPT, not an f-string placeholder for Python.
+        // It must be outside of Python's f-string interpretation for variable names.
+        let StreamlitLib = null; // Use a different name to avoid confusion if `Streamlit` is a global
         if (window.parent && window.parent.Streamlit) {{
             StreamlitLib = window.parent.Streamlit;
         }} else {{
-            console.warn("iframe: Streamlit object not immediately available.");
+            console.warn("iframe: Streamlit object not immediately available from window.parent.");
+            // Attempt to grab it after a small delay if it initializes later
             setTimeout(() => {{
                 if (window.parent && window.parent.Streamlit) {{
                     StreamlitLib = window.parent.Streamlit;
                     // console.log("iframe: Streamlit object acquired after delay.");
+                    // If StreamlitLib was null, and now it's not, we might need to re-trigger height
                     if (StreamlitLib) {{
                          setFrameHeightBasedOnDrawerState(currentDrawerState);
                     }}
@@ -114,6 +114,7 @@ custom_ui_html = f"""
             }}, 100);
         }}
 
+        // Use the Python-generated value for initial state.
         let currentDrawerState = {js_initial_drawer_state}; 
 
         function sendActionToStreamlit(actionType) {{
@@ -140,16 +141,18 @@ custom_ui_html = f"""
                     StreamlitLib.setFrameHeight(60); 
                 }}
             }} else {{
-                 // console.warn("StreamlitLib not available for setFrameHeightBasedOnDrawerState.");
+                 console.error("StreamlitLib not available for setFrameHeightBasedOnDrawerState.");
             }}
         }}
 
         function onRender(event) {{
+            // Ensure StreamlitLib is up-to-date if it became available later
             if (!StreamlitLib && window.parent && window.parent.Streamlit) {{
                 StreamlitLib = window.parent.Streamlit;
             }}
 
             if (!event || !event.detail || !event.detail.args) {{
+                // console.log("iframe: onRender called without args. Setting height based on current JS state: " + currentDrawerState);
                 setFrameHeightBasedOnDrawerState(currentDrawerState);
                 return;
             }}
@@ -157,6 +160,8 @@ custom_ui_html = f"""
             const args = event.detail.args;
             const drawer = document.getElementById('bottomDrawerInFrame');
             const newDrawerStateFromArgs = args.drawer_should_be_open;
+
+            // console.log("iframe: onRender received args:", args, "New state from args:", newDrawerStateFromArgs);
 
             if (newDrawerStateFromArgs) {{
                 drawer.classList.add('open');
@@ -173,6 +178,10 @@ custom_ui_html = f"""
             }}
         }});
         
+        // Initial height setting based on `currentDrawerState` (from Python)
+        // This will be called once the script block is parsed.
+        // `setFrameHeightBasedOnDrawerState` internally checks for StreamlitLib.
+        // The timeout for StreamlitLib above might handle cases where it's not ready yet.
         setFrameHeightBasedOnDrawerState(currentDrawerState);
 
     </script>
@@ -180,7 +189,7 @@ custom_ui_html = f"""
 </html>
 """
 
-# --- Streamlit App Layout ---
+# --- Streamlit App Layout (Python code continues) ---
 st.set_page_config(page_title="ChatBot UI", page_icon="💬", layout="wide")
 
 st.markdown("""
@@ -191,44 +200,38 @@ st.markdown("""
         width: 100% !important; 
         max-width: 100% !important; 
     }
-    iframe[title^="st.iframe"] { /* Selects iframes created by st.components.v1.html */
+    iframe[title^="st.iframe"] {
         border: none !important; 
         width: 100% !important; 
-        /* height is managed by the component's JS */
     }
     body { margin: 0 !important; }
 </style>
 """, unsafe_allow_html=True)
 
-# Arguments to pass to the HTML component's onRender event.
 component_args = {"drawer_should_be_open": st.session_state.drawer_open}
 
-# REMOVE THE 'key' ARGUMENT HERE
 component_event = components.html(
     custom_ui_html,
-    height=60,  # Initial height, JS will quickly adjust.
+    height=60, 
     scrolling=False,
-    args=component_args # Pass arguments to the component
+    key="custom_navbar_drawer_ui"
 )
 
-# Handle actions sent from the HTML component
 if component_event:
     action = component_event.get("action")
     if action == "open_drawer" and not st.session_state.drawer_open:
         st.session_state.drawer_open = True
-        st.rerun() 
+        st.rerun()
     elif action == "close_drawer" and st.session_state.drawer_open:
         st.session_state.drawer_open = False
         st.rerun()
 
 # --- Chat Interface ---
-# Conditionally display chat interface based on drawer state
 if not st.session_state.drawer_open:
-    # Add some horizontal padding for the chat content area
-    st.markdown("<div style='padding: 0 1rem;'>", unsafe_allow_html=True)
+    st.markdown("<div style='padding: 0 1rem;'>", unsafe_allow_html=True) # Add some horizontal padding for chat
 
     if not st.session_state.chat_messages:
-        st.info("Welcome! How can I help you today?")
+        st.info("Welcome! Ask me anything.")
 
     for msg_idx, msg in enumerate(st.session_state.chat_messages):
         with st.chat_message(msg["role"]): 
@@ -238,8 +241,7 @@ if not st.session_state.drawer_open:
 
     if user_prompt:
         st.session_state.chat_messages.append({"role": "user", "content": user_prompt})
-        # Simulate bot response
-        st.session_state.chat_messages.append({"role": "assistant", "content": f"Bot says: {user_prompt}"})
+        st.session_state.chat_messages.append({"role": "assistant", "content": f"Echo from bot: {user_prompt}"})
         st.rerun()
     
     st.markdown("</div>", unsafe_allow_html=True)
