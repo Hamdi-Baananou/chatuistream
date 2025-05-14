@@ -9,7 +9,6 @@ if "chat_messages" not in st.session_state:
 
 # --- Component HTML/JS (Content for the iframe) ---
 initial_drawer_class = "open" if st.session_state.drawer_open else ""
-js_initial_drawer_state = "true" if st.session_state.drawer_open else "false"
 
 custom_ui_html = f"""
 <!DOCTYPE html>
@@ -70,7 +69,7 @@ custom_ui_html = f"""
 </style>
 </head>
 <body>
-    <div class="container">
+    <div class="container"> <!-- Main container for iframe content -->
         <div class="navbar">
             <div class="company-name">LEONI</div>
             <button id="extractorBtnInFrame" class="extractor-button">
@@ -92,36 +91,14 @@ custom_ui_html = f"""
     </div>
 
     <script>
-        // This is PURE JAVASCRIPT, not an f-string placeholder for Python.
-        // It must be outside of Python's f-string interpretation for variable names.
-        let StreamlitLib = null; // Use a different name to avoid confusion if `Streamlit` is a global
-        if (window.parent && window.parent.Streamlit) {{
-            StreamlitLib = window.parent.Streamlit;
-        }} else {{
-            console.warn("iframe: Streamlit object not immediately available from window.parent.");
-            // Attempt to grab it after a small delay if it initializes later
-            setTimeout(() => {{
-                if (window.parent && window.parent.Streamlit) {{
-                    StreamlitLib = window.parent.Streamlit;
-                    // console.log("iframe: Streamlit object acquired after delay.");
-                    // If StreamlitLib was null, and now it's not, we might need to re-trigger height
-                    if (StreamlitLib) {{
-                         setFrameHeightBasedOnDrawerState(currentDrawerState);
-                    }}
-                }} else {{
-                    console.error("iframe: Streamlit object still not available after delay.");
-                }}
-            }}, 100);
-        }}
-
-        // Use the Python-generated value for initial state.
-        let currentDrawerState = {js_initial_drawer_state}; 
+        const Streamlit = window.parent.Streamlit;
+        let currentDrawerState = {initial_drawer_class.includes("open")}; // Initialize from class
 
         function sendActionToStreamlit(actionType) {{
-            if (StreamlitLib) {{
-                StreamlitLib.setComponentValue({{ action: actionType }});
+            if (Streamlit) {{
+                Streamlit.setComponentValue({{ action: actionType }});
             }} else {{
-                console.error("StreamlitLib not available for sendActionToStreamlit:", actionType);
+                console.error("Streamlit communication object not found in iframe.");
             }}
         }}
 
@@ -134,42 +111,40 @@ custom_ui_html = f"""
         }});
         
         function setFrameHeightBasedOnDrawerState(isDrawerOpen) {{
-            if (StreamlitLib) {{
+            if (Streamlit) {{
                 if (isDrawerOpen) {{
-                    StreamlitLib.setFrameHeight(window.innerHeight); 
+                    Streamlit.setFrameHeight(window.innerHeight); 
                 }} else {{
-                    StreamlitLib.setFrameHeight(60); 
+                    Streamlit.setFrameHeight(60); 
                 }}
-            }} else {{
-                 console.error("StreamlitLib not available for setFrameHeightBasedOnDrawerState.");
             }}
         }}
 
         function onRender(event) {{
-            // Ensure StreamlitLib is up-to-date if it became available later
-            if (!StreamlitLib && window.parent && window.parent.Streamlit) {{
-                StreamlitLib = window.parent.Streamlit;
+            // Fallback for initial render if Streamlit object isn't ready immediately
+            if (!Streamlit && window.parent && window.parent.Streamlit) {{
+                window.Streamlit = window.parent.Streamlit; // Re-assign if becomes available
             }}
 
-            if (!event || !event.detail || !event.detail.args) {{
-                // console.log("iframe: onRender called without args. Setting height based on current JS state: " + currentDrawerState);
+            if (!event.detail || !event.detail.args) {{
+                // console.log("iframe: onRender called without args. Setting height based on current state.");
                 setFrameHeightBasedOnDrawerState(currentDrawerState);
                 return;
             }}
             
             const args = event.detail.args;
             const drawer = document.getElementById('bottomDrawerInFrame');
-            const newDrawerStateFromArgs = args.drawer_should_be_open;
+            const newDrawerState = args.drawer_should_be_open;
 
-            // console.log("iframe: onRender received args:", args, "New state from args:", newDrawerStateFromArgs);
+            // console.log("iframe: onRender received args:", args, "New state:", newDrawerState);
 
-            if (newDrawerStateFromArgs) {{
+            if (newDrawerState) {{
                 drawer.classList.add('open');
             }} else {{
                 drawer.classList.remove('open');
             }}
-            currentDrawerState = newDrawerStateFromArgs;
-            setFrameHeightBasedOnDrawerState(newDrawerStateFromArgs);
+            currentDrawerState = newDrawerState; // Update local state
+            setFrameHeightBasedOnDrawerState(newDrawerState);
         }}
 
         window.addEventListener("message", event => {{
@@ -178,18 +153,30 @@ custom_ui_html = f"""
             }}
         }});
         
-        // Initial height setting based on `currentDrawerState` (from Python)
-        // This will be called once the script block is parsed.
-        // `setFrameHeightBasedOnDrawerState` internally checks for StreamlitLib.
-        // The timeout for StreamlitLib above might handle cases where it's not ready yet.
-        setFrameHeightBasedOnDrawerState(currentDrawerState);
-
-    </script>
-</body>
+        // Attempt initial height setting
+        // The 'streamlit:render' event is the primary driver, but this can help if Streamlit object is ready
+        if (Streamlit) {{
+           // console.log("iframe: Initial Streamlit object found. Setting initial height.");
+           setFrameHeightBasedOnDrawerState(currentDrawerState);
+        }} else {{
+           // console.log("iframe: Streamlit object not available on initial load for height setting. Will rely on onRender.");
+           // Attempt to set a default or wait for onRender
+           // A small timeout might help if Streamlit object initializes slightly later
+           setTimeout(() => {{
+               if (window.parent && window.parent.Streamlit) {{
+                   window.Streamlit = window.parent.Streamlit;
+                   // console.log("iframe: Streamlit object found after timeout. Setting height.");
+                   setFrameHeightBasedOnDrawerState(currentDrawerState);
+               }} else {{
+                   // console.log("iframe: Streamlit object still not found after timeout.");
+               }}
+           }}, 100); // 100ms delay
+        }}
+    </script></body>
 </html>
 """
 
-# --- Streamlit App Layout (Python code continues) ---
+# --- Streamlit App Layout ---
 st.set_page_config(page_title="ChatBot UI", page_icon="💬", layout="wide")
 
 st.markdown("""
@@ -208,33 +195,38 @@ st.markdown("""
 </style>
 """, unsafe_allow_html=True)
 
+# Args are not strictly needed by components.html itself for its own rendering,
+# but are passed to the iframe's `onRender` event.
 component_args = {"drawer_should_be_open": st.session_state.drawer_open}
 
 component_event = components.html(
     custom_ui_html,
-    height=60, 
+    height=60, # Start with a fixed small height. JS will adjust.
     scrolling=False,
-    key="custom_navbar_drawer_ui"
+    key="custom_navbar_drawer_ui" # Unique key
 )
 
 if component_event:
     action = component_event.get("action")
+    # print(f"Streamlit App: Received action '{action}'") # Debugging
     if action == "open_drawer" and not st.session_state.drawer_open:
         st.session_state.drawer_open = True
+        # print(f"Streamlit App: Set drawer_open to True. Rerunning.") # Debugging
         st.rerun()
     elif action == "close_drawer" and st.session_state.drawer_open:
         st.session_state.drawer_open = False
+        # print(f"Streamlit App: Set drawer_open to False. Rerunning.") # Debugging
         st.rerun()
 
 # --- Chat Interface ---
 if not st.session_state.drawer_open:
-    st.markdown("<div style='padding: 0 1rem;'>", unsafe_allow_html=True) # Add some horizontal padding for chat
+    st.markdown("<div style='padding: 0 1rem;'>", unsafe_allow_html=True)
 
     if not st.session_state.chat_messages:
         st.info("Welcome! Ask me anything.")
 
     for msg_idx, msg in enumerate(st.session_state.chat_messages):
-        with st.chat_message(msg["role"]): 
+        with st.chat_message(msg["role"]):
             st.write(msg["content"])
 
     user_prompt = st.chat_input("Your message...", key="main_chat_input")
